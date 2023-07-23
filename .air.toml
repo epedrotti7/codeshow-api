@@ -1,0 +1,15 @@
+# .air.toml
+[build]
+  cmd = "go build -o ./tmp/main ."
+  bin = "./tmp/main"
+  log = "air.log"
+
+[watch]
+  includes = [
+    "."
+  ]
+  excludes = [
+    "tmp",
+    "vendor",
+    "frontend/node_modules"
+  ]
