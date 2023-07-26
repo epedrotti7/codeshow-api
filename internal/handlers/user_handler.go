@@ -3,6 +3,7 @@ package handler
 import (
 	"net/http"
 
+	"github.com/epedrotti7/codeshow-api/internal/auth"
 	"github.com/epedrotti7/codeshow-api/internal/errors"
 	service "github.com/epedrotti7/codeshow-api/internal/services"
 	"github.com/epedrotti7/codeshow-api/internal/structs"
@@ -26,6 +27,15 @@ func Create(c echo.Context) error {
 	}
 
 	userResponse := service.Create(user)
+
+	var id string
+	if user.ID != nil {
+		id = user.ID.String()
+	}
+
+	token, err := auth.CreateToken(id)
+
+	userResponse.AuthToken = token
 
 	return c.JSON(http.StatusCreated, userResponse)
 }

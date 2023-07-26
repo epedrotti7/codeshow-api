@@ -3,54 +3,52 @@ package gpt
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"regexp"
 	"strings"
+	"time"
 
-	"github.com/epedrotti7/codeshow-api/internal/errors"
 	"github.com/epedrotti7/codeshow-api/internal/structs"
 	"github.com/labstack/echo/v4"
 )
 
-func GetQuestionChatGPT(tecnologia string, nivel string, c echo.Context) (<-chan structs.Question, <-chan error) {
-	// Criamos dois canais, um para a questão e outro para um erro potencial
-	questionCh := make(chan structs.Question, 1)
-	errCh := make(chan error, 1)
+func GetQuestionChatGPT(tecnologia string, nivel string, c echo.Context) (structs.Question, error) {
+	apiURL := "https://api.openai.com/v1/chat/completions"
+	authToken := "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"
 
-	go func() {
-		// Esta é a mesma lógica que você tinha antes
-		// Só que agora estamos em uma goroutine separada
+	questionToGPT := "Por favor, faça uma pergunta sobre " + tecnologia +
+		" de nível " + nivel + ". Formate sua resposta da seguinte maneira: " +
+		"Primeiro, apresente a pergunta. Em seguida, apresente quatro alternativas de resposta, " +
+		"cada uma iniciada por 'a)', 'b)', 'c)' ou 'd)'. " +
+		"Finalmente, indique a alternativa correta com a frase 'A resposta correta é: ' seguida da letra correspondente. " +
+		"Não inclua nenhum texto após a resposta correta. " +
+		"Por exemplo: 'Qual é a cor do céu? a) Verde b) Azul c) Vermelho d) Amarelo. A resposta correta é: b)'."
 
-		apiURL := "https://api.openai.com/v1/chat/completions"
-		authToken := "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"
-
-		questionToGPT := "Faça uma pergunta sobre " + tecnologia +
-			" de nível " + nivel + " com 4 alternativas de resposta " +
-			"e retorne APENAS a letra da alternativa correta."
-
-		requestDataQuestion := structs.ChatGPTRequest{
-			Model: "gpt-3.5-turbo",
-			Messages: []structs.Message{
-				{
-					Role:    "user",
-					Content: questionToGPT,
-				},
+	requestDataQuestion := structs.ChatGPTRequest{
+		Model: "gpt-3.5-turbo",
+		Messages: []structs.Message{
+			{
+				Role:    "user",
+				Content: questionToGPT,
 			},
-		}
+		},
+	}
+
+	re := regexp.MustCompile(`(?s)(.*?)(?:\n\n)(a\) .*?\nb\) .*?\nc\) .*?\nd\) .*?)(?:\n\n)(?:A resposta correta é: )(.*?\))`)
+
+	for i := 0; i < 5; i++ { // Limitando para 5 tentativas
 
 		jsonDataQuestion, err := json.Marshal(requestDataQuestion)
 		if err != nil {
-			errCh <- err
-			return
+			return structs.Question{}, err
 		}
 
 		requestQuestion, err := http.NewRequest("POST", apiURL, bytes.NewBuffer(jsonDataQuestion))
-
 		if err != nil {
-			errCh <- err
-			return
+			return structs.Question{}, err
 		}
 
 		requestQuestion.Header.Set("Authorization", fmt.Sprintf("Bearer %s", authToken))
@@ -58,163 +56,44 @@ func GetQuestionChatGPT(tecnologia string, nivel string, c echo.Context) (<-chan
 
 		client := http.Client{}
 		resp, err := client.Do(requestQuestion)
-
 		if err != nil {
-			errCh <- err
-			return
+			return structs.Question{}, err
 		}
 
 		defer resp.Body.Close()
 
 		responseData, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
-			errCh <- err
-			return
+			return structs.Question{}, err
 		}
 
-		// Converte a resposta JSON para a estrutura de resposta
 		var chatResponseQuestion structs.ChatGPTResponse
 		err = json.Unmarshal(responseData, &chatResponseQuestion)
+
 		if err != nil {
-			errCh <- err
-			return
+			return structs.Question{}, err
 		}
 
-		if len(chatResponseQuestion.Choices) > 0 {
+		fmt.Println(chatResponseQuestion.Choices[0].Message.Content)
 
-			var question, answer string
-			var alternatives []string
+		match := re.FindStringSubmatch(chatResponseQuestion.Choices[0].Message.Content)
 
-			// Expressão regular que captura a palavra "correta".
-			re := regexp.MustCompile(`(?i)resposta`)
+		if len(match) == 4 {
+			question := strings.TrimSpace(match[1])
+			alternatives := strings.Split(match[2], "\n")
+			answer := strings.TrimSpace(match[3])
 
-			parts := re.Split(chatResponseQuestion.Choices[0].Message.Content, -1)
-
-			if len(parts) < 2 {
-				err := fmt.Errorf("Ocorreu um erro inesperado, por favor tente novamente.")
-				errCh <- errors.Validate(err, c) // supondo que c é seu contexto do echo
-				return
+			if len(alternatives) == 4 && question != "" && answer != "" { // check if alternatives are not null and question & answer are not empty
+				return structs.Question{
+					Question:     question,
+					Answer:       answer,
+					Alternatives: alternatives,
+				}, nil
 			}
-
-			// Divide a primeira parte (pergunta e alternativas) por parágrafos.
-			paragraphs := strings.Split(parts[0], "\n\n")
-
-			if len(paragraphs) > 1 {
-				question = strings.TrimSpace(paragraphs[0])
-				alternatives = paragraphs[1:]
-			}
-
-			// A segunda parte contém a resposta. Nós a limpamos para remover espaços em branco e caracteres não desejados.
-			answer = strings.TrimSpace(parts[1])
-			answer = strings.Trim(answer, ": ")
-
-			// Junta as alternativas em uma única string.
-			alternativesJoined := strings.Join(alternatives, "\n\n")
-
-			questionCh <- structs.Question{
-				Question:     question,
-				Answer:       answer,
-				Alternatives: alternativesJoined,
-			}
-			return
 		}
 
-		errCh <- fmt.Errorf("Nenhuma pergunta retornada pela API do GPT-3")
-	}()
+		time.Sleep(2 * time.Second) // wait before the next attempt
+	}
 
-	// Retornamos os canais. O chamador pode selecionar nos canais para receber a questão ou um erro.
-	return questionCh, errCh
+	return structs.Question{}, errors.New("Failed to get a valid response from GPT-3 after 5 attempts")
 }
-
-// func GetQuestionChatGPT(tecnologia string, nivel string, c echo.Context) (structs.Question, error) {
-
-// 	apiURL := "https://api.openai.com/v1/chat/completions"
-// 	authToken := "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"
-
-// 	questionToGPT := "Faça uma pergunta sobre " + tecnologia +
-// 		" de nível " + nivel + " com 4 alternativas de resposta " +
-// 		"e retorne APENAS a letra da alternativa correta."
-
-// 	requestDataQuestion := structs.ChatGPTRequest{
-// 		Model: "gpt-3.5-turbo",
-// 		Messages: []structs.Message{
-// 			{
-// 				Role:    "user",
-// 				Content: questionToGPT,
-// 			},
-// 		},
-// 	}
-
-// 	jsonDataQuestion, err := json.Marshal(requestDataQuestion)
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
-
-// 	requestQuestion, err := http.NewRequest("POST", apiURL, bytes.NewBuffer(jsonDataQuestion))
-
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
-
-// 	requestQuestion.Header.Set("Authorization", fmt.Sprintf("Bearer %s", authToken))
-// 	requestQuestion.Header.Set("Content-Type", "application/json")
-
-// 	client := http.Client{}
-// 	resp, err := client.Do(requestQuestion)
-
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
-// 	defer resp.Body.Close()
-
-// 	responseData, err := ioutil.ReadAll(resp.Body)
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
-
-// 	// Converte a resposta JSON para a estrutura de resposta
-// 	var chatResponseQuestion structs.ChatGPTResponse
-// 	err = json.Unmarshal(responseData, &chatResponseQuestion)
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
-
-// 	if len(chatResponseQuestion.Choices) > 0 {
-
-// 		var question, answer string
-// 		var alternatives []string
-
-// 		// Expressão regular que captura a palavra "correta".
-// 		re := regexp.MustCompile(`(?i)resposta`)
-
-// 		parts := re.Split(chatResponseQuestion.Choices[0].Message.Content, -1)
-
-// 		if len(parts) < 2 {
-// 			err := fmt.Errorf("Ocorreu um erro inesperado, por favor tente novamente.")
-// 			return structs.Question{}, errors.Validate(err, c) // supondo que c é seu contexto do echo
-// 		}
-
-// 		// Divide a primeira parte (pergunta e alternativas) por parágrafos.
-// 		paragraphs := strings.Split(parts[0], "\n\n")
-
-// 		if len(paragraphs) > 1 {
-// 			question = strings.TrimSpace(paragraphs[0])
-// 			alternatives = paragraphs[1:]
-// 		}
-
-// 		// A segunda parte contém a resposta. Nós a limpamos para remover espaços em branco e caracteres não desejados.
-// 		answer = strings.TrimSpace(parts[1])
-// 		answer = strings.Trim(answer, ": ")
-
-// 		// Junta as alternativas em uma única string.
-// 		alternativesJoined := strings.Join(alternatives, "\n\n")
-
-// 		return structs.Question{
-// 			Question:     question,
-// 			Answer:       answer,
-// 			Alternatives: alternativesJoined,
-// 		}, nil
-// 	}
-
-// 	return structs.Question{}, nil
-// }

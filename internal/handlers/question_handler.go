@@ -8,13 +8,17 @@ import (
 	service "github.com/epedrotti7/codeshow-api/internal/services"
 	"github.com/epedrotti7/codeshow-api/internal/structs"
 	"github.com/go-playground/validator/v10"
+	"github.com/golang-jwt/jwt"
 	"github.com/labstack/echo/v4"
 )
 
 func CreateQuestionByUserId(c echo.Context) error {
 
+	user := c.Get("user").(*jwt.Token)
+	claims := user.Claims.(jwt.MapClaims)
+	userId := claims["user_id"].(string)
+
 	question := new(structs.QuestionRequest)
-	userId := c.Param("userId")
 
 	// O método Bind() usa o cabeçalho "Content-Type" da requisição para determinar como ler os dados.
 	// Ele suporta "application/json", "application/xml" e "application/x-www-form-urlencoded" por padrão.
@@ -40,8 +44,6 @@ func CompareAnswerById(c echo.Context) error {
 
 	answer := new(structs.Answer)
 
-	// O método Bind() usa o cabeçalho "Content-Type" da requisição para determinar como ler os dados.
-	// Ele suporta "application/json", "application/xml" e "application/x-www-form-urlencoded" por padrão.
 	c.Bind(answer)
 
 	id := c.Param("id")

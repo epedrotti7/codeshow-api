@@ -19,7 +19,6 @@ type ValidationError struct {
 func Validate(err error, c echo.Context) error {
 	var validationErrors []ValidationError
 
-	// Verificando se é um erro de validação
 	if _, ok := err.(validator.ValidationErrors); ok {
 		for _, validationErr := range err.(validator.ValidationErrors) {
 			ve := ValidationError{
@@ -29,7 +28,6 @@ func Validate(err error, c echo.Context) error {
 			validationErrors = append(validationErrors, ve)
 		}
 	} else {
-		// Isso significa que é um erro normal, não um erro de validação
 		ve := ValidationError{
 			Field: "Erro Personalizado",
 			Error: err.Error(),

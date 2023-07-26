@@ -12,28 +12,19 @@ import (
 
 func CreateQuestionByUserId(question *structs.QuestionRequest, userId string, c echo.Context) (*structs.Question, error) {
 
-	// Chamada a função e obtém os canais
-	questionCh, errCh := gpt.GetQuestionChatGPT(question.Tecnologia, question.Nivel, c)
+	questionResponseGPT, _ := gpt.GetQuestionChatGPT(question.Tecnologia, question.Nivel, c)
 
-	// Seleciona o primeiro canal que tem um retorno
-	select {
-	case questionResponseGPT := <-questionCh:
-		// Se o canal de perguntas retornar primeiro, processamos a pergunta
-		questionFormatted := structs.Question{
-			UserId:       userId,
-			Question:     questionResponseGPT.Question,
-			Answer:       questionResponseGPT.Answer,
-			Alternatives: questionResponseGPT.Alternatives,
-		}
-
-		questionSaved := repository.CreateQuestionByUserId(&questionFormatted)
-
-		return questionSaved, nil
-
-	case err := <-errCh:
-		// Se o canal de erro retornar primeiro, retornamos o erro
-		return nil, err
+	questionFormatted := structs.Question{
+		UserId:       userId,
+		Question:     questionResponseGPT.Question,
+		Answer:       questionResponseGPT.Answer,
+		Alternatives: questionResponseGPT.Alternatives,
 	}
+
+	questionSaved := repository.CreateQuestionByUserId(&questionFormatted)
+
+	return questionSaved, nil
+
 }
 
 func CompareAnswerById(answerReq *structs.Answer, id string, userId string) (*structs.QuestionResponse, error) {
