@@ -11,14 +11,18 @@ import (
 )
 
 func Create(user *structs.User) *structs.User {
-
 	ctx := context.TODO()
 	collection := connection.GetClient().Database("codeshow").Collection("users")
 
-	_, err := collection.InsertOne(ctx, user)
+	result, err := collection.InsertOne(ctx, user)
 
 	if err != nil {
 		log.Fatal(err)
+	}
+
+	oid, ok := result.InsertedID.(primitive.ObjectID)
+	if ok {
+		user.ID = &oid
 	}
 
 	return user

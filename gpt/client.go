@@ -39,7 +39,7 @@ func GetQuestionChatGPT(tecnologia string, nivel string, c echo.Context) (struct
 
 	re := regexp.MustCompile(`(?s)(.*?)(?:\n\n)(a\) .*?\nb\) .*?\nc\) .*?\nd\) .*?)(?:\n\n)(?:A resposta correta é: )(.*?\))`)
 
-	for i := 0; i < 5; i++ { // Limitando para 5 tentativas
+	for i := 0; i < 5; i++ {
 
 		jsonDataQuestion, err := json.Marshal(requestDataQuestion)
 		if err != nil {

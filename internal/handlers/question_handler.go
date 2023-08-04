@@ -42,12 +42,15 @@ func CreateQuestionByUserId(c echo.Context) error {
 
 func CompareAnswerById(c echo.Context) error {
 
+	user := c.Get("user").(*jwt.Token)
+	claims := user.Claims.(jwt.MapClaims)
+	userId := claims["user_id"].(string)
+
 	answer := new(structs.Answer)
 
 	c.Bind(answer)
 
 	id := c.Param("id")
-	userId := c.Request().Header.Get("X-User-Id")
 
 	validate := validator.New()
 	err := validate.Struct(answer)

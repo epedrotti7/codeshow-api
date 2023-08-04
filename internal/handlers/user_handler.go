@@ -30,7 +30,7 @@ func Create(c echo.Context) error {
 
 	var id string
 	if user.ID != nil {
-		id = user.ID.String()
+		id = user.ID.Hex()
 	}
 
 	token, err := auth.CreateToken(id)
