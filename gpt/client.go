@@ -17,7 +17,7 @@ import (
 
 func GetQuestionChatGPT(tecnologia string, nivel string, c echo.Context) (structs.Question, error) {
 	apiURL := "https://api.openai.com/v1/chat/completions"
-	authToken := "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"
+	authToken := ""
 
 	questionToGPT := "Por favor, faça uma pergunta sobre " + tecnologia +
 		" de nível " + nivel + ". Formate sua resposta da seguinte maneira: " +
